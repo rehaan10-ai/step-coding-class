@@ -1,0 +1,97 @@
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
+
+public class UsernameAvailabilitySystem {
+
+    // username -> userId
+    private final ConcurrentHashMap<String, String> userMap;
+
+    // username -> attempt frequency
+    private final ConcurrentHashMap<String, AtomicInteger> attemptMap;
+
+    // track most attempted username
+    private final AtomicReference<String> mostAttempted;
+
+    public UsernameAvailabilitySystem() {
+        userMap = new ConcurrentHashMap<>();
+        attemptMap = new ConcurrentHashMap<>();
+        mostAttempted = new AtomicReference<>(null);
+    }
+
+    // Register a username (used after confirming availability)
+    public void registerUser(String username, String userId) {
+        userMap.put(username.toLowerCase(), userId);
+    }
+
+    // O(1) availability check
+    public boolean checkAvailability(String username) {
+        username = username.toLowerCase();
+
+        // Track attempt frequency
+        attemptMap.putIfAbsent(username, new AtomicInteger(0));
+        int count = attemptMap.get(username).incrementAndGet();
+
+        updateMostAttempted(username, count);
+
+        return !userMap.containsKey(username);
+    }
+
+    // Suggest similar available usernames
+    public List<String> suggestAlternatives(String username) {
+        username = username.toLowerCase();
+        List<String> suggestions = new ArrayList<>();
+
+        // Append numbers
+        for (int i = 1; i <= 5; i++) {
+            String suggestion = username + i;
+            if (!userMap.containsKey(suggestion)) {
+                suggestions.add(suggestion);
+            }
+        }
+
+        // Replace underscore with dot
+        if (username.contains("_")) {
+            String dotVersion = username.replace("_", ".");
+            if (!userMap.containsKey(dotVersion)) {
+                suggestions.add(dotVersion);
+            }
+        }
+
+        return suggestions;
+    }
+
+    // Return most attempted username
+    public String getMostAttempted() {
+        return mostAttempted.get();
+    }
+
+    // Thread-safe update of most attempted username
+    private void updateMostAttempted(String username, int count) {
+        mostAttempted.updateAndGet(current -> {
+            if (current == null) return username;
+
+            int currentCount = attemptMap.get(current).get();
+            return (count > currentCount) ? username : current;
+        });
+    }
+
+    // Demo
+    public static void main(String[] args) {
+        UsernameAvailabilitySystem system = new UsernameAvailabilitySystem();
+
+        system.registerUser("john_doe", "U1");
+
+        System.out.println(system.checkAvailability("john_doe"));     // false
+        System.out.println(system.checkAvailability("jane_smith"));   // true
+
+        System.out.println(system.suggestAlternatives("john_doe"));
+
+        // Simulate attempts
+        for (int i = 0; i < 5; i++) {
+            system.checkAvailability("admin");
+        }
+
+        System.out.println("Most Attempted: " + system.getMostAttempted());
+    }
+}
